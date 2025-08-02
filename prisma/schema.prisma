@@ -1,0 +1,256 @@
+// ========================================
+// CRIMINAL MINDS GAME - PRISMA SCHEMA
+// Sistema de banco de dados para jogo de investigação
+// ========================================
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-1.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("BD_URL")
+}
+
+// ========================================
+// MODELO DE DADOS PRINCIPAL
+// ========================================
+
+model User {
+  // Campos básicos de identificação
+  id               Int      @id @default(autoincrement())
+  email            String   @unique @db.VarChar(255)
+  passwordHash     String   @map("password_hash") @db.VarChar(255)
+  fullName         String   @map("full_name") @db.VarChar(255)
+  detectiveName    String   @unique @map("detective_name") @db.VarChar(100)
+  gameCode         String?  @map("game_code") @db.VarChar(20)
+  
+  // Dados de conta
+  registrationDate DateTime @default(now()) @map("registration_date")
+  lastLogin        DateTime? @map("last_login")
+  isActive         Boolean  @default(true) @map("is_active")
+  emailVerified    Boolean  @default(false) @map("email_verified")
+  
+  // Timestamps
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  gameStats        GameStats?
+  sessions         UserSession[]
+  hostedGames      Game[] @relation("GameHost")
+  gameParticipations GamePlayer[]
+  gameProgress     GameProgress[]
+  wonGames         Game[] @relation("GameWinner")
+  
+  @@map("users")
+}
+
+model GameStats {
+  // Chave primária e relacionamento
+  id                      Int      @id @default(autoincrement())
+  userId                  Int      @unique @map("user_id")
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Estatísticas de jogos
+  gamesPlayed             Int      @default(0) @map("games_played")
+  gamesWon                Int      @default(0) @map("games_won")
+  gamesLost               Int      @default(0) @map("games_lost")
+  totalScore              Int      @default(0) @map("total_score")
+  cardsCollected          Int      @default(0) @map("cards_collected")
+  bestTimeSeconds         Int      @default(0) @map("best_time_seconds")
+  favoriteMode            GameMode @default(cards) @map("favorite_mode")
+  comboStreakRecord       Int      @default(0) @map("combo_streak_record")
+  
+  // Estatísticas detalhadas
+  evidencesFound          Int      @default(0) @map("evidences_found")
+  suspectsInterrogated    Int      @default(0) @map("suspects_interrogated")
+  locationsInvestigated   Int      @default(0) @map("locations_investigated")
+  totalPlaytimeMinutes    Int      @default(0) @map("total_playtime_minutes")
+  lastGameDate            DateTime? @map("last_game_date")
+  achievementsUnlocked    Int      @default(0) @map("achievements_unlocked")
+  
+  // Sistema de ranking
+  rankLevel               Int      @default(1) @map("rank_level")
+  rankPoints              Int      @default(0) @map("rank_points")
+  
+  // Timestamps
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+  
+  @@map("game_stats")
+}
+
+model UserSession {
+  // Identificação da sessão
+  id              Int      @id @default(autoincrement())
+  userId          Int      @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionToken    String   @unique @map("session_token") @db.VarChar(255)
+  
+  // Informações da sessão
+  ipAddress       String?  @map("ip_address") @db.VarChar(45)
+  userAgent       String?  @map("user_agent") @db.Text
+  deviceType      DeviceType? @map("device_type")
+  browser         String?  @db.VarChar(50)
+  operatingSystem String?  @map("operating_system") @db.VarChar(50)
+  
+  // Controle de sessão
+  isActive        Boolean  @default(true) @map("is_active")
+  loginTime       DateTime @default(now()) @map("login_time")
+  lastActivity    DateTime? @map("last_activity")
+  logoutTime      DateTime? @map("logout_time")
+  expiresAt       DateTime @map("expires_at")
+  
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  @@map("user_sessions")
+}
+
+model Game {
+  // Identificação do jogo
+  id                      Int      @id @default(autoincrement())
+  gameCode                String   @unique @map("game_code") @db.VarChar(20)
+  hostUserId             Int      @map("host_user_id")
+  host                   User     @relation("GameHost", fields: [hostUserId], references: [id])
+  
+  // Configurações do jogo
+  gameMode               GameMode @map("game_mode")
+  maxPlayers             Int      @default(6) @map("max_players")
+  currentPlayers         Int      @default(0) @map("current_players")
+  status                 GameStatus @default(waiting)
+  difficulty             Difficulty @default(medium)
+  timeLimitMinutes       Int      @default(60) @map("time_limit_minutes")
+  
+  // Timestamps do jogo
+  createdAt              DateTime @default(now()) @map("created_at")
+  startedAt              DateTime? @map("started_at")
+  finishedAt             DateTime? @map("finished_at")
+  
+  // Resultados
+  winnerUserId           Int?     @map("winner_user_id")
+  winner                 User?    @relation("GameWinner", fields: [winnerUserId], references: [id])
+  totalScore             Int?     @map("total_score")
+  gameDurationMinutes    Int?     @map("game_duration_minutes")
+  
+  // Controle
+  isActive               Boolean  @default(true) @map("is_active")
+  settingsJson           Json?    @map("settings_json")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  players                GamePlayer[]
+  progress               GameProgress[]
+  
+  @@map("games")
+}
+
+model GamePlayer {
+  // Identificação
+  id               Int      @id @default(autoincrement())
+  gameId           Int      @map("game_id")
+  game             Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId           Int      @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Dados do jogador no jogo
+  detectiveName    String   @map("detective_name") @db.VarChar(100)
+  role             PlayerRole @default(player)
+  isReady          Boolean  @default(false) @map("is_ready")
+  
+  // Tempos
+  joinTime         DateTime @default(now()) @map("join_time")
+  leaveTime        DateTime? @map("leave_time")
+  
+  // Estatísticas da partida
+  finalScore       Int?     @map("final_score")
+  cardsPlayed      Int      @default(0) @map("cards_played")
+  comboStreak      Int      @default(0) @map("combo_streak")
+  evidencesCollected Int    @default(0) @map("evidences_collected")
+  timeBonus        Int      @default(0) @map("time_bonus")
+  
+  // Status
+  isActive         Boolean  @default(true) @map("is_active")
+  positionFinished Int?     @map("position_finished")
+  achievementsEarned Int    @default(0) @map("achievements_earned")
+  
+  // Timestamps
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  
+  @@unique([gameId, userId])
+  @@map("game_players")
+}
+
+model GameProgress {
+  // Identificação
+  id                        Int      @id @default(autoincrement())
+  gameId                    Int      @map("game_id")
+  game                      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId                    Int      @map("user_id")
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId                 String?  @map("session_id") @db.VarChar(255)
+  
+  // Dados do progresso
+  saveTimestamp             DateTime @default(now()) @map("save_timestamp")
+  gameMode                  GameMode @map("game_mode")
+  currentLevel              Int      @default(1) @map("current_level")
+  cardsPlayed               Int      @default(0) @map("cards_played")
+  comboStreak               Int      @default(0) @map("combo_streak")
+  playerCoins               Int      @default(0) @map("player_coins")
+  
+  // Progresso da investigação
+  evidencesCollected        Int      @default(0) @map("evidences_collected")
+  suspectsInterrogated      Int      @default(0) @map("suspects_interrogated")
+  locationsInvestigated     Int      @default(0) @map("locations_investigated")
+  timeRemainingSeconds      Int      @map("time_remaining_seconds")
+  
+  // Dados específicos
+  progressDataJson          Json?    @map("progress_data_json")
+  isCurrentSave             Boolean  @default(true) @map("is_current_save")
+  
+  // Timestamps
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+  
+  @@map("game_progress")
+}
+
+// ========================================
+// ENUMS
+// ========================================
+
+enum GameMode {
+  cards
+  classic
+}
+
+enum GameStatus {
+  waiting
+  active
+  finished
+  cancelled
+}
+
+enum Difficulty {
+  easy
+  medium
+  hard
+}
+
+enum PlayerRole {
+  host
+  player
+}
+
+enum DeviceType {
+  desktop
+  mobile
+  tablet
+}

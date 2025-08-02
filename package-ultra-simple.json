@@ -1,0 +1,11 @@
+{
+  "name": "railway-test",
+  "version": "1.0.0",
+  "main": "server-ultra-simple.js",
+  "scripts": {
+    "start": "node server-ultra-simple.js"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
